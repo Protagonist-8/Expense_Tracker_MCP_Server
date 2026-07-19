@@ -381,3 +381,14 @@ def generate_budget_report(
             "status": "error",
             "message": str(e),
         }
+
+
+@mcp.resource("expense://categories", mime_type="application/json")
+def categories():
+    # Read fresh each time so you can edit the file without restarting
+    with open(CATEGORIES_PATH, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+if __name__ == "__main__":
+    mcp.run()
