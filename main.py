@@ -4,7 +4,9 @@ import os
 from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "finance.db")
-
+REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
+os.makedirs(REPORTS_DIR, exist_ok=True)
+CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
 mcp = FastMCP("Budget Tracker")
 
@@ -256,4 +258,126 @@ def delete_expense(expense_id: int) -> dict:
         return {
             "status": "error",
             "message": str(e)
+        }
+
+
+@mcp.tool()
+def generate_budget_report(
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict:
+    """
+    Generate an Excel budget report containing:
+      - Summary
+      - Expenses
+
+    If no dates are provided, all expenses are included.
+    """
+
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+
+            if start_date and end_date:
+                query = """
+                    SELECT
+                        id,
+                        date,
+                        amount,
+                        category,
+                        subcategory,
+                        note,
+                        created_at
+                    FROM expenses
+                    WHERE date BETWEEN ? AND ?
+                    ORDER BY date ASC, id ASC
+                """
+
+                expenses_df = pd.read_sql_query(
+                    query,
+                    conn,
+                    params=(start_date, end_date),
+                )
+
+            else:
+                query = """
+                    SELECT
+                        id,
+                        date,
+                        amount,
+                        category,
+                        subcategory,
+                        note,
+                        created_at
+                    FROM expenses
+                    ORDER BY date ASC, id ASC
+                """
+
+                expenses_df = pd.read_sql_query(query, conn)
+
+        total_expense = (
+            float(expenses_df["amount"].sum())
+            if not expenses_df.empty
+            else 0.0
+        )
+
+        total_transactions = len(expenses_df)
+
+        average_expense = (
+            float(expenses_df["amount"].mean())
+            if not expenses_df.empty
+            else 0.0
+        )
+
+        largest_expense = (
+            float(expenses_df["amount"].max())
+            if not expenses_df.empty
+            else 0.0
+        )
+
+        summary_df = pd.DataFrame(
+            {
+                "Metric": [
+                    "Total Expense",
+                    "Total Transactions",
+                    "Average Expense",
+                    "Largest Expense",
+                ],
+                "Value": [
+                    total_expense,
+                    total_transactions,
+                    round(average_expense, 2),
+                    largest_expense,
+                ],
+            }
+        )
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_path = os.path.join(
+            REPORTS_DIR,
+            f"Budget_Report_{timestamp}.xlsx",
+        )
+
+        with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+            summary_df.to_excel(
+                writer,
+                sheet_name="Summary",
+                index=False,
+            )
+
+            expenses_df.to_excel(
+                writer,
+                sheet_name="Expenses",
+                index=False,
+            )
+
+        return {
+            "status": "success",
+            "file_path": file_path,
+            "message": "Budget report generated successfully.",
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
         }
