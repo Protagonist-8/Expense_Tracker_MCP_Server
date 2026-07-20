@@ -2,6 +2,7 @@ from fastmcp import FastMCP
 import sqlite3
 import os
 from datetime import datetime
+import tempfile
 
 TEMP_DIR = tempfile.gettempdir()
 DB_PATH = os.path.join(TEMP_DIR, "expenses.db")
